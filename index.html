@@ -1,3 +1,345 @@
-<h1>
-  Hello
-</h1>
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="A Simple Dapp">
+
+  <title>Vote Dapp</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.12/dist/vue.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.0.32/dist/ethers.umd.min.js"></script>
+
+  <script>
+    const VOTE_ADDR = '0x5b2a057e1db47463695b4629114cbdae99235a46';
+    const VOTE_ABI = [{ "inputs": [{ "internalType": "uint256", "name": "_endTime", "type": "uint256" }], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "voter", "type": "address" }, { "indexed": false, "internalType": "uint8", "name": "proposal", "type": "uint8" }], "name": "Voted", "type": "event" }, { "inputs": [], "name": "endTime", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "proposalA", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "proposalB", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "proposalC", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "uint8", "name": "_proposal", "type": "uint8" }], "name": "vote", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "voted", "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "votes", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }];
+
+    $(function () {
+      init();
+    });
+
+    function getWeb3Provider() {
+      if (!window.web3Provider) {
+        if (!window.ethereum) {
+          console.error("there is no web3 provider.");
+          return null;
+        }
+        window.web3Provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+      }
+      return window.web3Provider;
+    }
+
+    function showAlert(title, message) {
+      let m = $('#alertModal');
+      m.find('.x-title').text(title);
+      m.find('.x-message').text(message);
+      let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+      myModal.show();
+    }
+
+    function showInfo(title, message) {
+      let m = $('#infoModal');
+      m.find('.x-title').text(title);
+      m.find('.x-message').text(message);
+      let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+      myModal.show();
+    }
+
+    function showLoading(title, message) {
+      let m = $('#loadingModal');
+      let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+      let obj = {
+        setTitle: (t) => {
+          m.find('.x-title').text(t);
+        },
+        setMessage: (t) => {
+          m.find('.x-message').text(t);
+        },
+        close: () => {
+          setTimeout(function () {
+            myModal.hide();
+          }, 500);
+        }
+      }
+      obj.setTitle(title);
+      obj.setMessage(message);
+      myModal.show();
+      return obj;
+    }
+
+    function translateError(err) {
+      window.err = err;
+      if (typeof (err) === 'string') {
+        return err;
+      }
+      if (err.error && err.error.code && err.error.message) {
+        return `Error (${err.error.code}): ${err.error.message}`;
+      }
+      if (err.code && err.message) {
+        return `Error (${err.code}): ${err.message}`;
+      }
+      return err.message || err.toString();
+    }
+
+    function init() {
+      console.log('init vue...');
+      window.vm = new Vue({
+        el: '#vm',
+        data: {
+          account: null,
+          chainId: 0,
+          proposal: 0
+        },
+        computed: {
+          ready: function () {
+            return this.account && this.chainId === 3;
+          },
+          wrongNetwork: function () {
+            return this.account && this.chainId !== 3;
+          }
+        },
+        methods: {
+          gotoScanUrl: function () {
+            window.open('https://ropsten.etherscan.io/address/' + this.account);
+          },
+          vote: async function () {
+            let loading = showLoading('Processing', 'Prepare for contract...');
+            try {
+              if (!this.ready) {
+                throw 'Wallet not ready!';
+              }
+              loading.setMessage('Please confirm transaction in wallet...');
+              let contract = new ethers.Contract(VOTE_ADDR, VOTE_ABI, window.getWeb3Provider().getSigner());
+              let tx = await contract.vote(this.proposal);
+              loading.setMessage('Please wait for blockchain...');
+              await tx.wait(1);
+              showInfo('Success', 'You have successfully voted!');
+            } catch (e) {
+              showAlert('Error', translateError(e));
+            }
+            loading.close();
+          },
+          accountChanged: function (accounts) {
+            console.log('wallet account changed:', accounts.length === 0 ? null : accounts[0]);
+            if (accounts.length === 0) {
+              this.disconnected();
+            } else {
+              this.account = accounts[0];
+              document.cookie = '__account__=' + this.account + ';max-age=1296000';
+            }
+          },
+          disconnected: async function () {
+            console.warn('wallet disconnected.');
+            this.account = null;
+          },
+          chainChanged: function (chainId) {
+            console.log('wallet chainId changed: ' + chainId + ' = ' + parseInt(chainId, 16));
+            this.chainId = parseInt(chainId, 16);
+          },
+          connectWallet: async function () {
+            console.log('try connect wallet...');
+            if (window.getWeb3Provider() === null) {
+              console.error('there is no web3 provider.');
+              return false;
+            }
+            try {
+              this.accountChanged(await window.ethereum.request({
+                method: 'eth_requestAccounts',
+              }));
+              this.chainChanged(await window.ethereum.request({
+                method: 'eth_chainId'
+              }));
+              window.ethereum.on('disconnect', this.disconnected);
+              window.ethereum.on('accountsChanged', this.accountChanged);
+              window.ethereum.on('chainChanged', this.chainChanged);
+            } catch (e) {
+              console.error('could not get a wallet connection.', e);
+              return false;
+            }
+            console.log('wallet connected.');
+            return true;
+          }
+        }
+      });
+    }
+  </script>
+</head>
+
+<body>
+  <!-- Loading Modal -->
+  <div id="loadingModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="loadingLabel">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header align-items-center d-flex">
+          <h4 class="modal-title x-title" id="loadingLabel">&nbsp;</h4>
+        </div>
+        <div class="modal-body">
+          <div class="float-start">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+          </div>
+          <div class="ms-5 ps-4 float-none">
+            <p class="x-message">&nbsp;</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alert Modal -->
+  <div id="alertModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="alertLabel">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header align-items-center d-flex">
+          <h4 class="modal-title x-title" id="alertLabel">&nbsp;</h4>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true"><i class="fe fe-x-circle"></i></span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="float-start">
+            <i class="fs-2 text-danger fe fe-alert-triangle"></i>
+          </div>
+          <div class="ms-5 ps-4 float-none">
+            <p class="x-message">&nbsp;</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-primary" data-bs-dismiss="modal" aria-label="Close">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info Modal -->
+  <div id="infoModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="infoLabel">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header align-items-center d-flex">
+          <h4 class="modal-title x-title" id="infoLabel">&nbsp;</h4>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true"><i class="fe fe-x-circle"></i></span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="float-start">
+            <i class="fs-2 fe fe-info"></i>
+          </div>
+          <div class="ms-5 ps-4 float-none">
+            <p class="x-message">&nbsp;</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-primary" data-bs-dismiss="modal" aria-label="Close">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="vm">
+    <header class="navbar navbar-expand-md" style="z-index:999;">
+      <nav class="container-xxl">
+        <div class="collapse navbar-collapse" id="navbar-default">
+          <ul class="navbar-nav">
+            <li class="nav-item">
+              <a class="nav-link" href=".">Vote Dapp</a>
+            </li>
+          </ul>
+        </div>
+        <ul id="wallet" class="mr-2 navbar-nav navbar-right-wrap" style="flex-direction: row !important;">
+          <li v-if="!ready && !wrongNetwork" class="ms-2 d-inline-block">
+            <button v-on:click="connectWallet" type="button" class="btn btn-primary">
+              Connect Wallet</button>
+          </li>
+          <li v-if="ready || wrongNetwork" class="ms-2 d-inline-block">
+            <a href="#0" class="nav-link" v-on:click="gotoScanUrl"><span v-text="account"></span> <i
+                class="fe fe-external-link"></i></a>
+          </li>
+          <li v-if="wrongNetwork" class="ms-2 d-inline-block">
+            <span class="nav-link">Please switch to Ropsten</span>
+          </li>
+        </ul>
+      </nav>
+    </header>
+
+    <div class="container-xxl mt-4">
+      <hr>
+      <div class="mb-4">
+        <h4>Your favorite Coin:</h4>
+      </div>
+      <div class="row mb-4">
+        <div class="col">
+          <form v-on:submit.prevent="vote" action="#0">
+            <div class="form-check mb-4">
+              <input v-model.number="proposal" class="form-check-input" type="radio" name="coin" id="proposalA"
+                value="1">
+              <label class="form-check-label" for="proposalA">
+                Bitcoin
+              </label>
+            </div>
+            <div class="form-check mb-4">
+              <input v-model.number="proposal" class="form-check-input" type="radio" name="coin" id="proposalB"
+                value="2">
+              <label class="form-check-label" for="proposalB">
+                Ethereum
+              </label>
+            </div>
+            <div class="form-check mb-4">
+              <input v-model.number="proposal" class="form-check-input" type="radio" name="coin" id="proposalC"
+                value="3">
+              <label class="form-check-label" for="proposalC">
+                Dogecoin
+              </label>
+            </div>
+            <button v-bind:disabled="!ready || proposal===0" type="submit" class="btn btn-primary">Submit</button>
+          </form>
+        </div>
+      </div>
+      <hr>
+    </div>
+  </div>
+
+  <footer class="mt-5 pt-4">
+    <div class="container">
+      <div class="row">
+        <div class="col-lg-3 mb-3">
+          <span class="fs-5 ms-2">A Simple Ethereum Dapp</span>
+        </div>
+        <div class="col-6 col-lg-2 offset-lg-1 mb-3">
+          <ul class="list-unstyled">
+            <li class="mb-2"><a target="_blank"
+                href="https://ropsten.etherscan.io/address/0x5b2a057e1db47463695b4629114cbdae99235a46#code">Contract</a>
+            </li>
+          </ul>
+        </div>
+        <div class="col-6 col-lg-2 mb-3">
+          <ul class="list-unstyled">
+            <li class="mb-2"><a target="_blank" href="https://github.com/michaelliao/vote-dapp">GitHub</a></li>
+          </ul>
+        </div>
+        <div class="col-6 col-lg-2 mb-3">
+          <ul class="list-unstyled">
+            <li class="mb-2"><a target="_blank" href="https://www.liaoxuefeng.com/wiki/1207298049439968">Solidity
+                Course</a></li>
+          </ul>
+        </div>
+        <div class="col-6 col-lg-2 mb-3">
+          <ul class="list-unstyled">
+            <li class="mb-2"><a target="_blank" href="https://ethereum.org">Ethereum</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </footer>
+</body>
+
+</html>
